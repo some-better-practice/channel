@@ -1,8 +1,8 @@
 package com.tsmc.autochannel.component;
 
 import com.tsmc.autochannel.metrics.ProcessingMetrics;
-import com.tsmc.autochannel.service.MinioService;
-import com.tsmc.autochannel.service.SftpService;
+import com.tsmc.autochannel.service.FileTransferService;
+import com.tsmc.autochannel.service.ObjectStorageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -16,11 +16,11 @@ import java.util.concurrent.ThreadLocalRandom;
 @RequiredArgsConstructor
 public class SftpUploadComponent {
 
-    private final SftpService sftpService;
-    private final MinioService minioService;
+    private final FileTransferService sftpService;
+    private final ObjectStorageService minioService;
     private final ProcessingMetrics metrics;
 
-    public void execute() {
+    public void execute(String channelId) {
         long start = System.currentTimeMillis();
         long ts = System.currentTimeMillis();
         String minioKey = "parsed/data_" + ts + "_parsed.csv";
@@ -30,7 +30,6 @@ public class SftpUploadComponent {
         try {
             tempFile = Files.createTempFile("sftp_upload_", ".csv");
 
-            // Try to download parsed file from MinIO; fall back to generated data
             if (minioService.objectExists(minioKey)) {
                 log.info("[sftpUpload] Downloading from MinIO: {}", minioKey);
                 minioService.downloadFile(minioKey, tempFile.toString());
@@ -41,7 +40,6 @@ public class SftpUploadComponent {
                 Files.write(tempFile, data);
             }
 
-            // Try real SFTP upload; log warning if unavailable
             try {
                 log.info("[sftpUpload] Uploading to SFTP: {}", remoteFileName);
                 sftpService.uploadFile(tempFile.toString(), remoteFileName);
@@ -51,8 +49,8 @@ public class SftpUploadComponent {
 
             long fileSize = ProcessingMetrics.randomFileSize();
             long duration = System.currentTimeMillis() - start;
-            metrics.recordFileSize("sftpUpload", fileSize);
-            metrics.recordDuration("sftpUpload", duration);
+            metrics.recordFileSize(channelId, "upload", fileSize);
+            metrics.recordDuration(channelId, "upload", duration);
 
             log.info("[sftpUpload] Done — file: {}", remoteFileName);
 

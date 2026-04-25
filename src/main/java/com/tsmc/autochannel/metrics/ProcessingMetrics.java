@@ -17,23 +17,25 @@ public class ProcessingMetrics {
 
     private final MeterRegistry registry;
 
-    public void recordFileSize(String component, long bytes) {
-        DistributionSummary.builder("file.processing.size")
+    public void recordFileSize(String channelId, String operation, double bytes) {
+        DistributionSummary.builder("file_processing_size")
                 .baseUnit("bytes")
                 .description("Size of files processed")
-                .tag("component", component)
+                .tag("channelId", channelId)
+                .tag("operation", operation)
                 .register(registry)
                 .record(bytes);
-        log.info("[metrics] component={} file_size={} bytes", component, bytes);
+        log.info("[metrics] channelId={} operation={} file_size={} bytes", channelId, operation, bytes);
     }
 
-    public void recordDuration(String component, long millis) {
-        Timer.builder("file.processing.duration")
+    public void recordDuration(String channelId, String operation, long millis) {
+        Timer.builder("file_processing_duration")
                 .description("Time taken to process files")
-                .tag("component", component)
+                .tag("channelId", channelId)
+                .tag("operation", operation)
                 .register(registry)
                 .record(millis, TimeUnit.MILLISECONDS);
-        log.info("[metrics] component={} duration={} ms", component, millis);
+        log.info("[metrics] channelId={} operation={} duration={} ms", channelId, operation, millis);
     }
 
     public static long randomFileSize() {

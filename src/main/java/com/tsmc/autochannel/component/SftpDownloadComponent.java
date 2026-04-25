@@ -1,8 +1,8 @@
 package com.tsmc.autochannel.component;
 
 import com.tsmc.autochannel.metrics.ProcessingMetrics;
-import com.tsmc.autochannel.service.MinioService;
-import com.tsmc.autochannel.service.SftpService;
+import com.tsmc.autochannel.service.FileTransferService;
+import com.tsmc.autochannel.service.ObjectStorageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -16,11 +16,11 @@ import java.util.concurrent.ThreadLocalRandom;
 @RequiredArgsConstructor
 public class SftpDownloadComponent {
 
-    private final SftpService sftpService;
-    private final MinioService minioService;
+    private final FileTransferService sftpService;
+    private final ObjectStorageService minioService;
     private final ProcessingMetrics metrics;
 
-    public void execute() {
+    public void execute(String channelId) {
         long start = System.currentTimeMillis();
         String filename = "data_" + System.currentTimeMillis() + ".stdf";
         Path tempFile = null;
@@ -28,7 +28,6 @@ public class SftpDownloadComponent {
         try {
             tempFile = Files.createTempFile("sftp_download_", ".stdf");
 
-            // Try real SFTP download; fall back to generated data if unavailable
             try {
                 log.info("[sftpDownload] Connecting to SFTP to download: {}", filename);
                 sftpService.downloadFile(filename, tempFile.toString());
@@ -39,14 +38,13 @@ public class SftpDownloadComponent {
                 Files.write(tempFile, data);
             }
 
-            // Upload to MinIO under raw/ prefix
             String minioKey = "raw/" + filename;
             minioService.uploadFile(minioKey, tempFile.toString());
 
             long fileSize = ProcessingMetrics.randomFileSize();
             long duration = System.currentTimeMillis() - start;
-            metrics.recordFileSize("sftpDownload", fileSize);
-            metrics.recordDuration("sftpDownload", duration);
+            metrics.recordFileSize(channelId, "download", fileSize);
+            metrics.recordDuration(channelId, "download", duration);
 
             log.info("[sftpDownload] Done — uploaded to MinIO: {}", minioKey);
 

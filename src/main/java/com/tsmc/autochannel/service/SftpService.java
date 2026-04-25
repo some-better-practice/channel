@@ -3,6 +3,7 @@ package com.tsmc.autochannel.service;
 import com.jcraft.jsch.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -11,7 +12,8 @@ import java.util.Vector;
 
 @Slf4j
 @Service
-public class SftpService {
+@Profile("!mock")
+public class SftpService implements FileTransferService {
 
     @Value("${sftp.host}")
     private String host;

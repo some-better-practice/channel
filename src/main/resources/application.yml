@@ -5,8 +5,10 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,prometheus,metrics
+        include: health,info,prometheus,metrics,loggers,env,beans
   endpoint:
+    health:
+      show-details: always
     prometheus:
       enabled: true
   metrics:
@@ -28,5 +30,7 @@ sftp:
   remote-dir: upload
 
 spring:
+  profiles:
+    active: mock
   main:
     web-application-type: servlet

@@ -1,7 +1,7 @@
 package com.tsmc.autochannel.component;
 
 import com.tsmc.autochannel.metrics.ProcessingMetrics;
-import com.tsmc.autochannel.service.MinioService;
+import com.tsmc.autochannel.service.ObjectStorageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -15,10 +15,10 @@ import java.util.concurrent.ThreadLocalRandom;
 @RequiredArgsConstructor
 public class Stdf2CsvComponent {
 
-    private final MinioService minioService;
+    private final ObjectStorageService minioService;
     private final ProcessingMetrics metrics;
 
-    public void execute() {
+    public void execute(String channelId) {
         long start = System.currentTimeMillis();
         long ts = System.currentTimeMillis();
         String sourceKey = "raw/data_" + ts + ".stdf";
@@ -30,7 +30,6 @@ public class Stdf2CsvComponent {
             stdfFile = Files.createTempFile("stdf_", ".stdf");
             csvFile = Files.createTempFile("csv_", ".csv");
 
-            // Try to download .stdf from MinIO; fall back to generated data
             if (minioService.objectExists(sourceKey)) {
                 log.info("[stdf2csv] Downloading from MinIO: {}", sourceKey);
                 minioService.downloadFile(sourceKey, stdfFile.toString());
@@ -41,17 +40,15 @@ public class Stdf2CsvComponent {
                 Files.write(stdfFile, data);
             }
 
-            // "Convert": copy content with new name (simulated STDF→CSV conversion)
             Files.copy(stdfFile, csvFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             log.info("[stdf2csv] Converted {} → {}", sourceKey, outputKey);
 
-            // Upload converted file back to MinIO
             minioService.uploadFile(outputKey, csvFile.toString());
 
             long fileSize = ProcessingMetrics.randomFileSize();
             long duration = System.currentTimeMillis() - start;
-            metrics.recordFileSize("stdf2csv", fileSize);
-            metrics.recordDuration("stdf2csv", duration);
+            metrics.recordFileSize(channelId, "convert", fileSize);
+            metrics.recordDuration(channelId, "convert", duration);
 
             log.info("[stdf2csv] Done — uploaded to MinIO: {}", outputKey);
 

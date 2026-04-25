@@ -1,9 +1,11 @@
 package com.tsmc.autochannel.service;
 
 import io.minio.*;
+import io.minio.messages.Item;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
 import java.io.InputStream;
@@ -13,8 +15,9 @@ import java.nio.file.StandardCopyOption;
 
 @Slf4j
 @Service
+@Profile("!mock")
 @RequiredArgsConstructor
-public class MinioService {
+public class MinioService implements ObjectStorageService {
 
     private final MinioClient minioClient;
 
@@ -52,6 +55,25 @@ public class MinioService {
                             .build());
             return true;
         } catch (Exception e) {
+            return false;
+        }
+    }
+
+    public boolean hasStdfFiles(String prefix) {
+        try {
+            Iterable<Result<Item>> results = minioClient.listObjects(
+                    ListObjectsArgs.builder()
+                            .bucket(bucket)
+                            .prefix(prefix)
+                            .build());
+            for (Result<Item> result : results) {
+                if (result.get().objectName().endsWith(".stdf")) {
+                    return true;
+                }
+            }
+            return false;
+        } catch (Exception e) {
+            log.warn("[minio] hasStdfFiles error: {}", e.getMessage());
             return false;
         }
     }

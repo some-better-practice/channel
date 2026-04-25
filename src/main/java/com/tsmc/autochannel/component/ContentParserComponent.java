@@ -1,7 +1,7 @@
 package com.tsmc.autochannel.component;
 
 import com.tsmc.autochannel.metrics.ProcessingMetrics;
-import com.tsmc.autochannel.service.MinioService;
+import com.tsmc.autochannel.service.ObjectStorageService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -15,10 +15,10 @@ import java.util.concurrent.ThreadLocalRandom;
 @RequiredArgsConstructor
 public class ContentParserComponent {
 
-    private final MinioService minioService;
+    private final ObjectStorageService minioService;
     private final ProcessingMetrics metrics;
 
-    public void execute() {
+    public void execute(String channelId) {
         long start = System.currentTimeMillis();
         long ts = System.currentTimeMillis();
         String sourceKey = "converted/data_" + ts + ".csv";
@@ -30,7 +30,6 @@ public class ContentParserComponent {
             inputFile = Files.createTempFile("content_input_", ".csv");
             parsedFile = Files.createTempFile("content_parsed_", ".csv");
 
-            // Try to download CSV from MinIO; fall back to generated data
             if (minioService.objectExists(sourceKey)) {
                 log.info("[contentParser] Downloading from MinIO: {}", sourceKey);
                 minioService.downloadFile(sourceKey, inputFile.toString());
@@ -41,17 +40,15 @@ public class ContentParserComponent {
                 Files.write(inputFile, data);
             }
 
-            // "Parse": copy content with _parsed suffix (simulated content parsing)
             Files.copy(inputFile, parsedFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             log.info("[contentParser] Parsed {} → {}", sourceKey, outputKey);
 
-            // Upload parsed file back to MinIO
             minioService.uploadFile(outputKey, parsedFile.toString());
 
             long fileSize = ProcessingMetrics.randomFileSize();
             long duration = System.currentTimeMillis() - start;
-            metrics.recordFileSize("contentParser", fileSize);
-            metrics.recordDuration("contentParser", duration);
+            metrics.recordFileSize(channelId, "parse", fileSize);
+            metrics.recordDuration(channelId, "parse", duration);
 
             log.info("[contentParser] Done — uploaded to MinIO: {}", outputKey);
 
