@@ -3,6 +3,8 @@ package com.tsmc.autochannel.component;
 import com.tsmc.autochannel.metrics.ProcessingMetrics;
 import com.tsmc.autochannel.service.FileTransferService;
 import com.tsmc.autochannel.service.ObjectStorageService;
+import io.micrometer.observation.Observation;
+import io.micrometer.observation.ObservationRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -19,39 +21,46 @@ public class SftpDownloadComponent {
     private final FileTransferService sftpService;
     private final ObjectStorageService minioService;
     private final ProcessingMetrics metrics;
+    private final ObservationRegistry observationRegistry;
 
     public void execute(String channelId) {
-        long start = System.currentTimeMillis();
         String filename = "data_" + System.currentTimeMillis() + ".stdf";
-        Path tempFile = null;
+        String minioKey = "raw/" + filename;
 
-        try {
+        Observation obs = Observation.createNotStarted("sftp.download", observationRegistry)
+                .lowCardinalityKeyValue("channelId", channelId)
+                .lowCardinalityKeyValue("operation", "download")
+                .highCardinalityKeyValue("filename", filename)
+                .start();
+
+        Path tempFile = null;
+        try (Observation.Scope ignored = obs.openScope()) {
             tempFile = Files.createTempFile("sftp_download_", ".stdf");
 
             try {
-                log.info("[sftpDownload] Connecting to SFTP to download: {}", filename);
+                log.info("Connecting to SFTP to download: {}", filename);
                 sftpService.downloadFile(filename, tempFile.toString());
             } catch (Exception e) {
-                log.warn("[sftpDownload] SFTP unavailable ({}), using generated data", e.getMessage());
+                log.warn("SFTP unavailable ({}), using generated data", e.getMessage());
                 byte[] data = new byte[ThreadLocalRandom.current().nextInt(1024, 512 * 1024)];
                 ThreadLocalRandom.current().nextBytes(data);
                 Files.write(tempFile, data);
             }
 
-            String minioKey = "raw/" + filename;
             minioService.uploadFile(minioKey, tempFile.toString());
 
             long fileSize = ProcessingMetrics.randomFileSize();
-            long duration = System.currentTimeMillis() - start;
             metrics.recordFileSize(channelId, "download", fileSize);
-            metrics.recordDuration(channelId, "download", duration);
+            obs.highCardinalityKeyValue("file.size.bytes", String.valueOf(fileSize));
 
-            log.info("[sftpDownload] Done — uploaded to MinIO: {}", minioKey);
+            log.info("Uploaded to MinIO: {}", minioKey);
 
         } catch (Exception e) {
-            log.error("[sftpDownload] Failed: {}", e.getMessage(), e);
+            obs.error(e);
+            log.error("Failed: {}", e.getMessage(), e);
         } finally {
             deleteSilently(tempFile);
+            obs.stop();
         }
     }
 
