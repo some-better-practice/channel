@@ -1,8 +1,11 @@
 package com.tsmc.autochannel.component;
 
+import com.tsmc.autochannel.entity.OperationType;
+import com.tsmc.autochannel.entity.TransferLog;
 import com.tsmc.autochannel.metrics.ProcessingMetrics;
 import com.tsmc.autochannel.service.FileTransferService;
 import com.tsmc.autochannel.service.ObjectStorageService;
+import com.tsmc.autochannel.service.TransferLogService;
 import io.micrometer.observation.Observation;
 import io.micrometer.observation.ObservationRegistry;
 import lombok.RequiredArgsConstructor;
@@ -22,10 +25,14 @@ public class SftpDownloadComponent {
     private final ObjectStorageService minioService;
     private final ProcessingMetrics metrics;
     private final ObservationRegistry observationRegistry;
+    private final TransferLogService transferLogService;
 
     public void execute(String channelId) {
+        long start = System.currentTimeMillis();
         String filename = "data_" + System.currentTimeMillis() + ".stdf";
         String minioKey = "raw/" + filename;
+
+        TransferLog transferLog = transferLogService.logStart(channelId, OperationType.SFTP_DOWNLOAD, filename);
 
         Observation obs = Observation.createNotStarted("sftp.download", observationRegistry)
                 .lowCardinalityKeyValue("channelId", channelId)
@@ -50,13 +57,16 @@ public class SftpDownloadComponent {
             minioService.uploadFile(minioKey, tempFile.toString());
 
             long fileSize = ProcessingMetrics.randomFileSize();
+            long durationMs = System.currentTimeMillis() - start;
             metrics.recordFileSize(channelId, "download", fileSize);
             obs.highCardinalityKeyValue("file.size.bytes", String.valueOf(fileSize));
 
+            transferLogService.logSuccess(transferLog, fileSize, durationMs);
             log.info("Uploaded to MinIO: {}", minioKey);
 
         } catch (Exception e) {
             obs.error(e);
+            transferLogService.logFailed(transferLog, e.getMessage());
             log.error("Failed: {}", e.getMessage(), e);
         } finally {
             deleteSilently(tempFile);

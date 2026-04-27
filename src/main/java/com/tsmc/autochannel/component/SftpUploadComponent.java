@@ -1,8 +1,13 @@
 package com.tsmc.autochannel.component;
 
+import com.tsmc.autochannel.entity.OperationType;
+import com.tsmc.autochannel.entity.TransferLog;
 import com.tsmc.autochannel.metrics.ProcessingMetrics;
 import com.tsmc.autochannel.service.FileTransferService;
 import com.tsmc.autochannel.service.ObjectStorageService;
+import com.tsmc.autochannel.service.TransferLogService;
+import io.micrometer.observation.Observation;
+import io.micrometer.observation.ObservationRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -19,45 +24,59 @@ public class SftpUploadComponent {
     private final FileTransferService sftpService;
     private final ObjectStorageService minioService;
     private final ProcessingMetrics metrics;
+    private final ObservationRegistry observationRegistry;
+    private final TransferLogService transferLogService;
 
     public void execute(String channelId) {
         long start = System.currentTimeMillis();
         long ts = System.currentTimeMillis();
         String minioKey = "parsed/data_" + ts + "_parsed.csv";
         String remoteFileName = "data_" + ts + "_parsed.csv";
-        Path tempFile = null;
 
-        try {
+        TransferLog transferLog = transferLogService.logStart(channelId, OperationType.SFTP_UPLOAD, remoteFileName);
+
+        Observation obs = Observation.createNotStarted("sftp.upload", observationRegistry)
+                .lowCardinalityKeyValue("channelId", channelId)
+                .lowCardinalityKeyValue("operation", "upload")
+                .highCardinalityKeyValue("filename", remoteFileName)
+                .start();
+
+        Path tempFile = null;
+        try (Observation.Scope ignored = obs.openScope()) {
             tempFile = Files.createTempFile("sftp_upload_", ".csv");
 
             if (minioService.objectExists(minioKey)) {
-                log.info("[sftpUpload] Downloading from MinIO: {}", minioKey);
+                log.info("Downloading from MinIO: {}", minioKey);
                 minioService.downloadFile(minioKey, tempFile.toString());
             } else {
-                log.info("[sftpUpload] Source not found in MinIO, generating data for: {}", minioKey);
+                log.info("Source not found in MinIO, generating data for: {}", minioKey);
                 byte[] data = new byte[ThreadLocalRandom.current().nextInt(1024, 256 * 1024)];
                 ThreadLocalRandom.current().nextBytes(data);
                 Files.write(tempFile, data);
             }
 
             try {
-                log.info("[sftpUpload] Uploading to SFTP: {}", remoteFileName);
+                log.info("Uploading to SFTP: {}", remoteFileName);
                 sftpService.uploadFile(tempFile.toString(), remoteFileName);
             } catch (Exception e) {
-                log.warn("[sftpUpload] SFTP unavailable ({}), skipping upload", e.getMessage());
+                log.warn("SFTP unavailable ({}), skipping upload", e.getMessage());
             }
 
             long fileSize = ProcessingMetrics.randomFileSize();
-            long duration = System.currentTimeMillis() - start;
+            long durationMs = System.currentTimeMillis() - start;
             metrics.recordFileSize(channelId, "upload", fileSize);
-            metrics.recordDuration(channelId, "upload", duration);
+            obs.highCardinalityKeyValue("file.size.bytes", String.valueOf(fileSize));
 
-            log.info("[sftpUpload] Done — file: {}", remoteFileName);
+            transferLogService.logSuccess(transferLog, fileSize, durationMs);
+            log.info("Done — file: {}", remoteFileName);
 
         } catch (Exception e) {
-            log.error("[sftpUpload] Failed: {}", e.getMessage(), e);
+            obs.error(e);
+            transferLogService.logFailed(transferLog, e.getMessage());
+            log.error("Failed: {}", e.getMessage(), e);
         } finally {
             deleteSilently(tempFile);
+            obs.stop();
         }
     }
 

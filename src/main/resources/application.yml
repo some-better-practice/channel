@@ -34,3 +34,16 @@ spring:
     active: mock
   main:
     web-application-type: servlet
+  datasource:
+    url: jdbc:mariadb://localhost:3306/autochannel?useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC
+    username: autochannel
+    password: password
+    driver-class-name: org.mariadb.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MariaDBDialect
+        format_sql: true

@@ -1,7 +1,10 @@
 package com.tsmc.autochannel.component;
 
+import com.tsmc.autochannel.entity.OperationType;
+import com.tsmc.autochannel.entity.TransferLog;
 import com.tsmc.autochannel.metrics.ProcessingMetrics;
 import com.tsmc.autochannel.service.ObjectStorageService;
+import com.tsmc.autochannel.service.TransferLogService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -17,6 +20,7 @@ public class ContentParserComponent {
 
     private final ObjectStorageService minioService;
     private final ProcessingMetrics metrics;
+    private final TransferLogService transferLogService;
 
     public void execute(String channelId) {
         long start = System.currentTimeMillis();
@@ -25,6 +29,8 @@ public class ContentParserComponent {
         String outputKey = "parsed/data_" + ts + "_parsed.csv";
         Path inputFile = null;
         Path parsedFile = null;
+
+        TransferLog transferLog = transferLogService.logStart(channelId, OperationType.CONTENT_PARSE, sourceKey);
 
         try {
             inputFile = Files.createTempFile("content_input_", ".csv");
@@ -50,9 +56,11 @@ public class ContentParserComponent {
             metrics.recordFileSize(channelId, "parse", fileSize);
             metrics.recordDuration(channelId, "parse", duration);
 
+            transferLogService.logSuccess(transferLog, fileSize, duration);
             log.info("[contentParser] Done — uploaded to MinIO: {}", outputKey);
 
         } catch (Exception e) {
+            transferLogService.logFailed(transferLog, e.getMessage());
             log.error("[contentParser] Failed: {}", e.getMessage(), e);
         } finally {
             deleteSilently(inputFile);

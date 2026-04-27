@@ -1,7 +1,10 @@
 package com.tsmc.autochannel.component;
 
+import com.tsmc.autochannel.entity.OperationType;
+import com.tsmc.autochannel.entity.TransferLog;
 import com.tsmc.autochannel.metrics.ProcessingMetrics;
 import com.tsmc.autochannel.service.ObjectStorageService;
+import com.tsmc.autochannel.service.TransferLogService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -17,6 +20,7 @@ public class Stdf2CsvComponent {
 
     private final ObjectStorageService minioService;
     private final ProcessingMetrics metrics;
+    private final TransferLogService transferLogService;
 
     public void execute(String channelId) {
         long start = System.currentTimeMillis();
@@ -25,6 +29,8 @@ public class Stdf2CsvComponent {
         String outputKey = "converted/data_" + ts + ".csv";
         Path stdfFile = null;
         Path csvFile = null;
+
+        TransferLog transferLog = transferLogService.logStart(channelId, OperationType.STDF_CONVERT, sourceKey);
 
         try {
             stdfFile = Files.createTempFile("stdf_", ".stdf");
@@ -50,9 +56,11 @@ public class Stdf2CsvComponent {
             metrics.recordFileSize(channelId, "convert", fileSize);
             metrics.recordDuration(channelId, "convert", duration);
 
+            transferLogService.logSuccess(transferLog, fileSize, duration);
             log.info("[stdf2csv] Done — uploaded to MinIO: {}", outputKey);
 
         } catch (Exception e) {
+            transferLogService.logFailed(transferLog, e.getMessage());
             log.error("[stdf2csv] Failed: {}", e.getMessage(), e);
         } finally {
             deleteSilently(stdfFile);
