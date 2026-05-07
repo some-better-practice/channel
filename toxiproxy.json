@@ -4,5 +4,11 @@
     "listen": "0.0.0.0:13306",
     "upstream": "autochannel-mariadb:3306",
     "enabled": true
+  },
+  {
+    "name": "sftp",
+    "listen": "0.0.0.0:2222",
+    "upstream": "autochannel-sftp:22",
+    "enabled": true
   }
 ]

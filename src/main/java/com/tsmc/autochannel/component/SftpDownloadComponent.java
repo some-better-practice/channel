@@ -14,7 +14,6 @@ import org.springframework.stereotype.Component;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.concurrent.ThreadLocalRandom;
 
 @Slf4j
 @Component
@@ -44,15 +43,8 @@ public class SftpDownloadComponent {
         try (Observation.Scope ignored = obs.openScope()) {
             tempFile = Files.createTempFile("sftp_download_", ".stdf");
 
-            try {
-                log.info("Connecting to SFTP to download: {}", filename);
-                sftpService.downloadFile(filename, tempFile.toString());
-            } catch (Exception e) {
-                log.warn("SFTP unavailable ({}), using generated data", e.getMessage());
-                byte[] data = new byte[ThreadLocalRandom.current().nextInt(1024, 512 * 1024)];
-                ThreadLocalRandom.current().nextBytes(data);
-                Files.write(tempFile, data);
-            }
+            log.info("Connecting to SFTP to download: {}", filename);
+            sftpService.downloadFile(filename, tempFile.toString());
 
             minioService.uploadFile(minioKey, tempFile.toString());
 

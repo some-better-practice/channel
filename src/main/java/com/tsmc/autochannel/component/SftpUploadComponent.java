@@ -55,12 +55,8 @@ public class SftpUploadComponent {
                 Files.write(tempFile, data);
             }
 
-            try {
-                log.info("Uploading to SFTP: {}", remoteFileName);
-                sftpService.uploadFile(tempFile.toString(), remoteFileName);
-            } catch (Exception e) {
-                log.warn("SFTP unavailable ({}), skipping upload", e.getMessage());
-            }
+            log.info("Uploading to SFTP: {}", remoteFileName);
+            sftpService.uploadFile(tempFile.toString(), remoteFileName);
 
             long fileSize = ProcessingMetrics.randomFileSize();
             long durationMs = System.currentTimeMillis() - start;

@@ -42,7 +42,7 @@ sftp:
 
 spring:
   profiles:
-    active: mock
+    active: non-mock
   main:
     web-application-type: servlet
   datasource:
