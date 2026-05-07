@@ -26,36 +26,78 @@ services:
   #     - "2222:22"
   #   command: autochannel:password:::upload
 
-  prometheus:
-    image: prom/prometheus:latest
-    container_name: autochannel-prometheus
+  # prometheus:
+  #   image: prom/prometheus:latest
+  #   container_name: autochannel-prometheus
+  #   ports:
+  #     - "9090:9090"
+  #   volumes:
+  #     - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+  #     - prometheus_data:/prometheus
+  #   command:
+  #     - '--config.file=/etc/prometheus/prometheus.yml'
+  #     - '--storage.tsdb.path=/prometheus'
+  #     - '--web.enable-lifecycle'
+  #   extra_hosts:
+  #     - "host.docker.internal:host-gateway"
+
+  # grafana:
+  #   image: grafana/grafana:latest
+  #   container_name: autochannel-grafana
+  #   ports:
+  #     - "3030:3000"
+  #   environment:
+  #     - GF_SECURITY_ADMIN_USER=admin
+  #     - GF_SECURITY_ADMIN_PASSWORD=admin
+  #   volumes:
+  #     - grafana_data:/var/lib/grafana
+  #     - ./grafana/provisioning:/etc/grafana/provisioning
+  #   depends_on:
+  #     - prometheus
+  mariadb:
+    image: mariadb:11.4
+    container_name: autochannel-mariadb
     ports:
-      - "9090:9090"
+      - "3306:3306"
+    environment:
+      MARIADB_ROOT_PASSWORD: rootpassword
+      MARIADB_DATABASE: autochannel
+      MARIADB_USER: autochannel
+      MARIADB_PASSWORD: password
     volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
-      - prometheus_data:/prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.enable-lifecycle'
+      - mariadb_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-net
+
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:latest
+    container_name: toxiproxy
+    command: ["-config", "/etc/toxiproxy/toxiproxy.json", "-host", "0.0.0.0"]
+    ports:
+      - "8474:8474"   # REST API（管理用）
+      - "13306:13306" # MariaDB proxy
+      - "2222:2222"   # SFTP proxy
+      - "9000:9000"   # MinIO proxy
+    volumes:
+      - ./toxiproxy.json:/etc/toxiproxy/toxiproxy.json:ro
+    depends_on:
+      mariadb:
+        condition: service_healthy
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    networks:
+      - app-net
 
-  grafana:
-    image: grafana/grafana:latest
-    container_name: autochannel-grafana
-    ports:
-      - "3030:3000"
-    environment:
-      - GF_SECURITY_ADMIN_USER=admin
-      - GF_SECURITY_ADMIN_PASSWORD=admin
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ./grafana/provisioning:/etc/grafana/provisioning
-    depends_on:
-      - prometheus
+networks:
+  app-net:
 
 volumes:
   minio_data:
   prometheus_data:
   grafana_data:
+  mariadb_data:

@@ -19,7 +19,7 @@ public class AutoComponent {
     private static final int    GENERATE_THREADS      = 2;
     private static final int    GENERATE_COUNT        = 3;
     private static final long   GENERATE_INTERVAL_SEC = 15;
-    private static final long   SCHEDULE_PERIOD_SEC   = 3 * 60;  // each job runs every 3 min
+    private static final long   SCHEDULE_PERIOD_SEC   = 20;  // each job runs every 3 min
 
     private final GenerateFilesComponent generateFilesComponent;
     private final SftpDownloadComponent  sftpDownloadComponent;
@@ -55,13 +55,13 @@ public class AutoComponent {
         // ── stdf2csv: starts after 1 min, every 3 min (only if stdf in MinIO) ──
         scheduler.scheduleAtFixedRate(
                 this::runStdf2Csv,
-                60, SCHEDULE_PERIOD_SEC, TimeUnit.SECONDS);
+                5, SCHEDULE_PERIOD_SEC, TimeUnit.SECONDS);
         log.info("[auto] stdf2csv scheduled (initialDelay=60s, period={}s)", SCHEDULE_PERIOD_SEC);
 
         // ── sftp-upload: starts after 2 min, every 3 min ───────────────────────
         scheduler.scheduleAtFixedRate(
                 this::runSftpUpload,
-                120, SCHEDULE_PERIOD_SEC, TimeUnit.SECONDS);
+                10, SCHEDULE_PERIOD_SEC, TimeUnit.SECONDS);
         log.info("[auto] sftpUpload scheduled (initialDelay=120s, period={}s)", SCHEDULE_PERIOD_SEC);
 
         log.info("[auto] All schedulers running. Press Ctrl+C to stop.");

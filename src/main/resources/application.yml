@@ -1,6 +1,17 @@
 server:
   port: 8080
 
+logging:
+  file:
+    name: logs/autochannel.log
+  logback:
+    rollingpolicy:
+      max-file-size: 50MB
+      max-history: 30
+      file-name-pattern: logs/autochannel.%d{yyyy-MM-dd}.%i.log.gz
+  pattern:
+    file: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+
 management:
   endpoints:
     web:
@@ -35,10 +46,13 @@ spring:
   main:
     web-application-type: servlet
   datasource:
-    url: jdbc:mariadb://localhost:3306/autochannel?useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC
+    url: jdbc:mariadb://localhost:13306/autochannel?useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC&socketTimeout=500
     username: autochannel
     password: password
     driver-class-name: org.mariadb.jdbc.Driver
+    hikari:
+      initialization-fail-timeout: 60000  # 啟動時等待 DB ready 最多 60 秒
+      connection-timeout: 300             # 一般取得連線最多等 0.5 秒，超時拋 CannotGetJdbcConnectionException
   jpa:
     hibernate:
       ddl-auto: update

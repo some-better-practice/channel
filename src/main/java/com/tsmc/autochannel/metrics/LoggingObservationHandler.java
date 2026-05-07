@@ -11,19 +11,20 @@ public class LoggingObservationHandler implements ObservationHandler<Observation
 
     @Override
     public void onStart(Observation.Context ctx) {
-        log.info("[obs] START name={} keys={}", ctx.getName(), ctx.getLowCardinalityKeyValues());
+        log.info("[obs] START name={} keys={}, {}", ctx.getName(), ctx.getLowCardinalityKeyValues(), ctx.getHighCardinalityKeyValues());
     }
 
     @Override
     public void onStop(Observation.Context ctx) {
-        log.info("[obs] STOP name={} keys={}", ctx.getName(), ctx.getLowCardinalityKeyValues());
+        log.info("[obs] STOP name={} keys={}, {}", ctx.getName(), ctx.getLowCardinalityKeyValues(), ctx.getHighCardinalityKeyValues());
     }
 
     @Override
     public void onError(Observation.Context ctx) {
         Throwable error = ctx.getError();
-        log.error("[obs] ERROR name={} keys={} error={}",
+        log.error("[obs] ERROR name={} keys={}, {}, error={}",
                 ctx.getName(), ctx.getLowCardinalityKeyValues(),
+                ctx.getHighCardinalityKeyValues(),
                 error != null ? error.getMessage() : "unknown");
     }
 
