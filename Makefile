@@ -64,6 +64,8 @@ build:
 
 clean:
 	mvn clean
+test:
+	JAVA_HOME=$(/usr/libexec/java_home -v 17) mvn test
 
 # ── Run via JAR ──────────────────────────────────────────────────────────────
 

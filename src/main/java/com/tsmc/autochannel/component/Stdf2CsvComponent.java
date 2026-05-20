@@ -1,5 +1,6 @@
 package com.tsmc.autochannel.component;
 
+import com.tsmc.autochannel.config.Stdf2CsvConfig;
 import com.tsmc.autochannel.entity.OperationType;
 import com.tsmc.autochannel.entity.TransferLog;
 import com.tsmc.autochannel.metrics.ProcessingMetrics;
@@ -7,11 +8,15 @@ import com.tsmc.autochannel.service.ObjectStorageService;
 import com.tsmc.autochannel.service.TransferLogService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.io.File;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 @Slf4j
 @Component
@@ -21,8 +26,12 @@ public class Stdf2CsvComponent {
     private final ObjectStorageService minioService;
     private final ProcessingMetrics metrics;
     private final TransferLogService transferLogService;
+    private final ProcessStarter processStarter;
 
-    public void execute(String channelId) {
+    @Value("${stdf2csv.timeout-seconds:300}")
+    private long timeoutSeconds;
+
+    public void execute(String channelId, Stdf2CsvConfig.Converter_TYPE converterType) {
         long start = System.currentTimeMillis();
         long ts = System.currentTimeMillis();
         String sourceKey = "raw/data_" + ts + ".stdf";
@@ -40,13 +49,10 @@ public class Stdf2CsvComponent {
                 log.info("[stdf2csv] Downloading from MinIO: {}", sourceKey);
                 minioService.downloadFile(sourceKey, stdfFile.toString());
             } else {
-                log.info("[stdf2csv] Source not found in MinIO, generating data for: {}", sourceKey);
-                byte[] data = new byte[ThreadLocalRandom.current().nextInt(1024, 256 * 1024)];
-                ThreadLocalRandom.current().nextBytes(data);
-                Files.write(stdfFile, data);
+                log.info("[stdf2csv] Source not found in MinIO, skipping download: {}", sourceKey);
             }
 
-            Files.copy(stdfFile, csvFile, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            runConversion(stdfFile.toString(), csvFile.toString(), converterType);
             log.info("[stdf2csv] Converted {} → {}", sourceKey, outputKey);
 
             minioService.uploadFile(outputKey, csvFile.toString());
@@ -66,6 +72,57 @@ public class Stdf2CsvComponent {
             deleteSilently(stdfFile);
             deleteSilently(csvFile);
         }
+    }
+
+    void runConversion(String inputFile, String outputFile, Stdf2CsvConfig.Converter_TYPE converterType)
+            throws IOException, InterruptedException, TimeoutException {
+        ProcessBuilder pb = getStdf2CsvBuilder(inputFile, outputFile, converterType);
+        Process process = processStarter.start(pb);
+        try {
+            boolean finished = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
+            if (!finished) {
+                process.destroyForcibly();
+                throw new TimeoutException(
+                        "stdf2csv timed out after " + timeoutSeconds + "s: " + inputFile);
+            }
+            int exitCode = process.exitValue();
+            if (exitCode != 0) {
+                throw new RuntimeException("stdf2csv exited with code " + exitCode + ": " + inputFile);
+            }
+        } catch (InterruptedException e) {
+            process.destroyForcibly();
+            Thread.currentThread().interrupt();
+            throw e;
+        }
+    }
+
+    ProcessBuilder getStdf2CsvBuilder(String inputFile, String outputFile,
+                                      Stdf2CsvConfig.Converter_TYPE converterType) {
+        ProcessBuilder processBuilder;
+        switch (converterType) {
+            case TESTNAME:
+                processBuilder = new ProcessBuilder(
+                        "dotnet", "stdf2csv.dll", inputFile, outputFile, "/S", "/1", "/M");
+                break;
+            case TESTNO:
+                processBuilder = new ProcessBuilder(
+                        "dotnet", "stdf2csv.dll", inputFile, outputFile, "/S", "/1", "/N");
+                break;
+            case NONCHANNEL:
+                processBuilder = new ProcessBuilder(
+                        "dotnet", "stdf2csv.dll", inputFile, outputFile, "/S", "/1", "/CN");
+                break;
+            case NONMERGE:
+                processBuilder = new ProcessBuilder(
+                        "dotnet", "stdf2csv.dll", inputFile, outputFile, "/S", "/1");
+                break;
+            default:
+                log.error("No ConverterType defined, please check!");
+                processBuilder = new ProcessBuilder(
+                        "dotnet", "stdf2csv.dll", inputFile, outputFile, "/S", "/1", "/N");
+        }
+        processBuilder.directory(new File(System.getProperty("user.dir")));
+        return processBuilder;
     }
 
     private void deleteSilently(Path path) {
